@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Studio 3D - Remote Stream</title>
+    
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+
+    <style>
+        :root {
+            --glass-bg: rgba(18, 18, 18, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent: #ffffff;
+            --accent-dim: rgba(255, 255, 255, 0.5);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html {
+            width: 100%; height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+            background-color: #0a0a0a;
+            color: var(--accent);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        #viewer-container {
+            width: 100%; height: 100%;
+            position: relative;
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        model-viewer {
+            width: 100%; height: 100%;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        /* Top Bar - Status Tracking */
+        .top-nav {
+            position: absolute; top: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 10; pointer-events: none;
+        }
+        .nav-pill {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            padding: 8px 16px; border-radius: 20px;
+            pointer-events: auto; display: flex; gap: 12px; align-items: center;
+            font-size: 12px; letter-spacing: -0.2px;
+        }
+        .status-dot {
+            width: 6px; height: 6px; background: #ff9500; border-radius: 50%;
+            transition: background 0.3s;
+        }
+        .status-dot.ready { background: #30d158; }
+
+        /* Bottom Toolbar - Main Controls */
+        .bottom-toolbar {
+            position: absolute; bottom: 24px;
+            left: 50%; transform: translateX(-50%);
+            background: var(--glass-bg);
+            backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            padding: 6px; border-radius: 30px;
+            display: flex; gap: 4px; align-items: center;
+            z-index: 10; max-width: 95%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        /* Control Segment */
+        .control-tab {
+            display: flex; align-items: center;
+            padding: 8px 14px; border-radius: 20px;
+            font-size: 12px; font-weight: 500; color: var(--accent-dim);
+            cursor: pointer; user-select: none; transition: all 0.2s ease;
+            gap: 6px; white-space: nowrap;
+        }
+        .control-tab:hover { color: var(--accent); }
+        .control-tab.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--accent);
+        }
+
+        select.control-select {
+            background: transparent; border: none; color: var(--accent);
+            font-size: 12px; font-weight: 500; outline: none; cursor: pointer;
+        }
+        select.control-select option { background: #1a1a1a; color: #fff; }
+
+        .divider {
+            width: 1px; height: 16px;
+            background: rgba(255, 255, 255, 0.15);
+            margin: 0 4px;
+        }
+
+        #ar-trigger {
+            background: var(--accent); color: #000;
+            font-weight: 600; padding: 8px 16px; border-radius: 20px;
+            border: none; cursor: pointer; display: none;
+        }
+        #ar-trigger:hover { background: rgba(255, 255, 255, 0.9); }
+
+        /* Smooth Center Loader Text */
+        #loading-text {
+            position: absolute; font-size: 14px; font-weight: 400;
+            color: var(--accent-dim); transition: opacity 0.3s;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="viewer-container">
+        
+        <div id="loading-text">Fetching Asset from Backend...</div>
+
+        <model-viewer 
+            id="viewer" 
+            camera-controls 
+            touch-action="pan-y" 
+            shadow-intensity="1" 
+            exposure="0.9" 
+            environment-image="neutral"
+            ar
+            ar-modes="webxr scene-viewer quick-look"
+            ar-scale="auto"
+            ar-placement="floor">
+            
+            <button slot="ar-button" id="ar-trigger">▲ View in Space</button>
+        </model-viewer>
+
+        <div class="top-nav">
+            <div class="nav-pill">
+                <div id="status-light" class="status-dot"></div>
+                <span id="status-label">Connecting Engine...</span>
+            </div>
+        </div>
+
+        <div class="bottom-toolbar">
+            
+            <div id="tab-turntable" class="control-tab"><span>⟳</span> Turntable</div>
+            <div id="tab-shadow" class="control-tab active"><span>☖</span> Shadows</div>
+
+            <div id="dock-animations" style="display: none; align-items: center;">
+                <div class="divider"></div>
+                <div id="tab-play" class="control-tab active"><span>▻</span> Play</div>
+                <div class="control-tab">
+                    <select id="clip-picker" class="control-select"></select>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+            <div id="tab-ar-placement" class="control-tab"><span>⚲</span> Floor</div>
+            <div id="tab-ar-scale" class="control-tab"><span>⤢</span> Scalable</div>
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // CONFIGURATION: Set your Backend GLB URL here
+        // ==========================================
+        const BACKEND_GLB_URL = 'https://github.com/GokulakannanSeenivasan111/Web-URL-Native/blob/main/HopperSimulated.glb'; 
+
+        const viewer = document.getElementById('viewer');
+        const loadingText = document.getElementById('loading-text');
+        const statusLight = document.getElementById('status-light');
+        const statusLabel = document.getElementById('status-label');
+        
+        const tabTurntable = document.getElementById('tab-turntable');
+        const tabShadow = document.getElementById('tab-shadow');
+        const dockAnims = document.getElementById('dock-animations');
+        const tabPlay = document.getElementById('tab-play');
+        const clipPicker = document.getElementById('clip-picker');
+        const tabArPlacement = document.getElementById('tab-ar-placement');
+        const tabArScale = document.getElementById('tab-ar-scale');
+
+        // Self-Executing Dynamic Remote Loader
+        function initRemoteStream() {
+            if (!BACKEND_GLB_URL) {
+                statusLabel.textContent = "Error: No backend URL specified.";
+                loadingText.textContent = "Configuration Missing.";
+                return;
+            }
+            
+            // Push URL directly into standard network processing queue
+            viewer.src = BACKEND_GLB_URL;
+        }
+
+        // Native Progress Monitoring Event Hook
+        viewer.addEventListener('progress', (e) => {
+            const percentage = Math.round(e.detail.totalProgress * 100);
+            statusLabel.textContent = `Streaming: ${percentage}%`;
+            loadingText.textContent = `Downloading Matrix... ${percentage}%`;
+        });
+
+        // Event: File processing completed successfully
+        viewer.addEventListener('load', () => {
+            loadingText.style.opacity = '0';
+            viewer.style.opacity = '1';
+            statusLight.classList.add('ready');
+            statusLabel.textContent = "Engine Online";
+
+            // Inspect Asset Schema for Skeletal Animations
+            const tracks = viewer.availableAnimations;
+            if (tracks && tracks.length > 0) {
+                tracks.forEach(trackName => {
+                    const el = document.createElement('option');
+                    el.value = trackName; el.textContent = trackName;
+                    clipPicker.appendChild(el);
+                });
+                viewer.animationName = tracks[0];
+                viewer.play();
+                dockAnims.style.display = 'flex';
+            }
+        });
+
+        // Event: Catching broken links or structural network bugs
+        viewer.addEventListener('error', (err) => {
+            statusLabel.textContent = "CORS / Network Error";
+            loadingText.textContent = "Failed to compile remote file matrix.";
+            console.error("3D Engine Connection Failure:", err);
+        });
+
+        // --- Core UI Actions Systems ---
+
+        tabTurntable.addEventListener('click', () => {
+            if (tabTurntable.classList.toggle('active')) {
+                viewer.setAttribute('auto-rotate', '');
+                viewer.setAttribute('rotation-per-second', '24deg');
+            } else {
+                viewer.removeAttribute('auto-rotate');
+            }
+        });
+
+        tabShadow.addEventListener('click', () => {
+            viewer.setAttribute('shadow-intensity', tabShadow.classList.toggle('active') ? "1" : "0");
+        });
+
+        tabPlay.addEventListener('click', () => {
+            if (viewer.paused) {
+                viewer.play();
+                tabPlay.classList.add('active');
+                tabPlay.innerHTML = '<span>▻</span> Play';
+            } else {
+                viewer.pause();
+                tabPlay.classList.remove('active');
+                tabPlay.innerHTML = '<span>⏸</span> Paused';
+            }
+        });
+
+        clipPicker.addEventListener('change', (e) => {
+            viewer.animationName = e.target.value;
+            if (!viewer.paused) viewer.play();
+        });
+
+        tabArPlacement.addEventListener('click', () => {
+            if (viewer.getAttribute('ar-placement') === 'floor') {
+                viewer.setAttribute('ar-placement', 'wall');
+                tabArPlacement.innerHTML = '<span>↕</span> Wall Mount';
+                tabArPlacement.classList.add('active');
+            } else {
+                viewer.setAttribute('ar-placement', 'floor');
+                tabArPlacement.innerHTML = '<span>⚲</span> Floor';
+                tabArPlacement.classList.remove('active');
+            }
+        });
+
+        tabArScale.addEventListener('click', () => {
+            if (viewer.getAttribute('ar-scale') === 'auto') {
+                viewer.setAttribute('ar-scale', 'fixed');
+                tabArScale.innerHTML = '<span>🔒</span> Fixed 1:1';
+                tabArScale.classList.add('active');
+            } else {
+                viewer.setAttribute('ar-scale', 'auto');
+                tabArScale.innerHTML = '<span>⤢</span> Scalable';
+                tabArScale.classList.remove('active');
+            }
+        });
+
+        // Trigger loading routine immediately
+        initRemoteStream();
+    </script>
+</body>
+</html>
