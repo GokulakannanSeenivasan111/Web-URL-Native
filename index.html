@@ -101,7 +101,7 @@
             border: none; cursor: pointer;
             
             position: absolute; 
-            bottom: 85px; /* Floats just above your custom bottom toolbar */
+            bottom: 85px;
             left: 50%;
             transform: translateX(-50%);
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
@@ -169,12 +169,10 @@
     </div>
 
     <script>
-        // ============================================================
-        // CONFIGURATION: Set your Backend GLB URL here
-        // ============================================================
         const BACKEND_GLB_URL = 'https://cdn.jsdelivr.net/gh/GokulakannanSeenivasan111/Web-URL-Native@main/HopperSimulated.glb'; 
 
         const viewer = document.getElementById('viewer');
+        const arTrigger = document.getElementById('ar-trigger');
         const loadingText = document.getElementById('loading-text');
         const statusLight = document.getElementById('status-light');
         const statusLabel = document.getElementById('status-label');
@@ -186,6 +184,10 @@
         const clipPicker = document.getElementById('clip-picker');
         const tabArPlacement = document.getElementById('tab-ar-placement');
         const tabArScale = document.getElementById('tab-ar-scale');
+
+        // Store target scaling calculations globally
+        let targetScaleString = "1 1 1";
+        let requiresRescaling = false;
 
         function initRemoteStream() {
             if (!BACKEND_GLB_URL) {
@@ -208,27 +210,19 @@
             statusLight.classList.add('ready');
             statusLabel.textContent = "Engine Online";
 
-            // --------------------------------------------------------
-            // DYNAMIC AUTO-RESCALE LOGIC FOR AR & VIEWPORT
-            // --------------------------------------------------------
-            // Get the calculated real-world dimensions (in meters)
+            // 1. Calculate dimensions without instantly applying them to the DOM
             const dimensions = viewer.getDimensions();
             const maxDimension = Math.max(dimensions.x, dimensions.y, dimensions.z);
-            
-            // Set target bounding dimension limit for AR (e.g., 0.75 meters / 75cm)
-            const targetSizeMeters = 0.75; 
+            const targetSizeMeters = 0.75; // Ideal size in AR environment
 
             if (maxDimension > targetSizeMeters) {
                 const calculatedScale = targetSizeMeters / maxDimension;
-                // Apply uniform reduction scaling
-                viewer.setAttribute('scale', `${calculatedScale} ${calculatedScale} ${calculatedScale}`);
-                
-                // Forces the engine's 3D preview bounds to match the brand new scale
-                if (typeof viewer.updateFraming === 'function') {
-                    viewer.updateFraming();
-                }
+                targetScaleString = `${calculatedScale} ${calculatedScale} ${calculatedScale}`;
+                requiresRescaling = true;
+            } else {
+                targetScaleString = "1 1 1";
+                requiresRescaling = false;
             }
-            // --------------------------------------------------------
 
             const tracks = viewer.availableAnimations;
             if (tracks && tracks.length > 0) {
@@ -240,6 +234,27 @@
                 viewer.animationName = tracks[0];
                 viewer.play();
                 dockAnims.style.display = 'flex';
+            }
+        });
+
+        // 2. DYNAMIC AR-ONLY SCALING SWAP LOGIC
+        // Inject scale immediately upon user tapping the AR activation button
+        arTrigger.addEventListener('click', () => {
+            if (requiresRescaling) {
+                viewer.setAttribute('scale', targetScaleString);
+            }
+        });
+
+        // Listen for AR state changes to clean up the browser workspace environment
+        viewer.addEventListener('ar-status', (event) => {
+            if (event.detail.status === 'not-presenting') {
+                // User exited AR or returned to screen: Wipe out custom scale attribute entirely
+                viewer.removeAttribute('scale');
+                
+                // Keep the standard 3D viewport perfectly framed
+                if (typeof viewer.updateFraming === 'function') {
+                    viewer.updateFraming();
+                }
             }
         });
 
