@@ -100,7 +100,6 @@
             font-weight: 600; padding: 10px 20px; border-radius: 24px;
             border: none; cursor: pointer;
             
-            /* Required fixes below */
             position: absolute; 
             bottom: 85px; /* Floats just above your custom bottom toolbar */
             left: 50%;
@@ -110,7 +109,6 @@
         }
         #ar-trigger:hover { background: rgba(255, 255, 255, 0.9); }
         
-        /* model-viewer automatically adds this class when AR is unsupported */
         #ar-trigger.show-ar-unsupported {
             display: none !important;
         }
@@ -171,9 +169,9 @@
     </div>
 
     <script>
-        // ==========================================
+        // ============================================================
         // CONFIGURATION: Set your Backend GLB URL here
-        // ==========================================
+        // ============================================================
         const BACKEND_GLB_URL = 'https://cdn.jsdelivr.net/gh/GokulakannanSeenivasan111/Web-URL-Native@main/HopperSimulated.glb'; 
 
         const viewer = document.getElementById('viewer');
@@ -209,6 +207,28 @@
             viewer.style.opacity = '1';
             statusLight.classList.add('ready');
             statusLabel.textContent = "Engine Online";
+
+            // --------------------------------------------------------
+            // DYNAMIC AUTO-RESCALE LOGIC FOR AR & VIEWPORT
+            // --------------------------------------------------------
+            // Get the calculated real-world dimensions (in meters)
+            const dimensions = viewer.getDimensions();
+            const maxDimension = Math.max(dimensions.x, dimensions.y, dimensions.z);
+            
+            // Set target bounding dimension limit for AR (e.g., 0.75 meters / 75cm)
+            const targetSizeMeters = 0.75; 
+
+            if (maxDimension > targetSizeMeters) {
+                const calculatedScale = targetSizeMeters / maxDimension;
+                // Apply uniform reduction scaling
+                viewer.setAttribute('scale', `${calculatedScale} ${calculatedScale} ${calculatedScale}`);
+                
+                // Forces the engine's 3D preview bounds to match the brand new scale
+                if (typeof viewer.updateFraming === 'function') {
+                    viewer.updateFraming();
+                }
+            }
+            // --------------------------------------------------------
 
             const tracks = viewer.availableAnimations;
             if (tracks && tracks.length > 0) {
