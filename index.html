@@ -69,7 +69,6 @@
             z-index: 10; max-width: 95%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
 
-        /* Control Segment */
         .control-tab {
             display: flex; align-items: center;
             padding: 8px 14px; border-radius: 20px;
@@ -95,12 +94,26 @@
             margin: 0 4px;
         }
 
+        /* FIXED AR TRIGGER */
         #ar-trigger {
             background: var(--accent); color: #000;
-            font-weight: 600; padding: 8px 16px; border-radius: 20px;
-            border: none; cursor: pointer; display: none;
+            font-weight: 600; padding: 10px 20px; border-radius: 24px;
+            border: none; cursor: pointer;
+            
+            /* Required fixes below */
+            position: absolute; 
+            bottom: 85px; /* Floats just above your custom bottom toolbar */
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 100;
         }
         #ar-trigger:hover { background: rgba(255, 255, 255, 0.9); }
+        
+        /* model-viewer automatically adds this class when AR is unsupported */
+        #ar-trigger.show-ar-unsupported {
+            display: none !important;
+        }
 
         /* Smooth Center Loader Text */
         #loading-text {
@@ -161,7 +174,7 @@
         // ==========================================
         // CONFIGURATION: Set your Backend GLB URL here
         // ==========================================
-        const BACKEND_GLB_URL = 'https://github.com/GokulakannanSeenivasan111/Web-URL-Native/blob/main/HopperSimulated.glb'; 
+        const BACKEND_GLB_URL = 'https://modelviewer.dev/shared-assets/models/RobotExpressive.glb'; 
 
         const viewer = document.getElementById('viewer');
         const loadingText = document.getElementById('loading-text');
@@ -176,33 +189,27 @@
         const tabArPlacement = document.getElementById('tab-ar-placement');
         const tabArScale = document.getElementById('tab-ar-scale');
 
-        // Self-Executing Dynamic Remote Loader
         function initRemoteStream() {
             if (!BACKEND_GLB_URL) {
                 statusLabel.textContent = "Error: No backend URL specified.";
                 loadingText.textContent = "Configuration Missing.";
                 return;
             }
-            
-            // Push URL directly into standard network processing queue
             viewer.src = BACKEND_GLB_URL;
         }
 
-        // Native Progress Monitoring Event Hook
         viewer.addEventListener('progress', (e) => {
             const percentage = Math.round(e.detail.totalProgress * 100);
             statusLabel.textContent = `Streaming: ${percentage}%`;
             loadingText.textContent = `Downloading Matrix... ${percentage}%`;
         });
 
-        // Event: File processing completed successfully
         viewer.addEventListener('load', () => {
             loadingText.style.opacity = '0';
             viewer.style.opacity = '1';
             statusLight.classList.add('ready');
             statusLabel.textContent = "Engine Online";
 
-            // Inspect Asset Schema for Skeletal Animations
             const tracks = viewer.availableAnimations;
             if (tracks && tracks.length > 0) {
                 tracks.forEach(trackName => {
@@ -216,14 +223,11 @@
             }
         });
 
-        // Event: Catching broken links or structural network bugs
         viewer.addEventListener('error', (err) => {
             statusLabel.textContent = "CORS / Network Error";
             loadingText.textContent = "Failed to compile remote file matrix.";
             console.error("3D Engine Connection Failure:", err);
         });
-
-        // --- Core UI Actions Systems ---
 
         tabTurntable.addEventListener('click', () => {
             if (tabTurntable.classList.toggle('active')) {
@@ -279,7 +283,6 @@
             }
         });
 
-        // Trigger loading routine immediately
         initRemoteStream();
     </script>
 </body>
