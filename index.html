@@ -3,322 +3,437 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio 3D - Remote Stream</title>
+    <title>Studio 3D - Dual Stream</title>
     
-    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
 
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+    
     <style>
         :root {
-            --glass-bg: rgba(18, 18, 18, 0.6);
-            --glass-border: rgba(255, 255, 255, 0.08);
+            --glass-bg: rgba(18,18,18,0.6);
+            --glass-border: rgba(255,255,255,0.08);
             --accent: #ffffff;
-            --accent-dim: rgba(255, 255, 255, 0.5);
+            --accent-dim: rgba(255,255,255,0.5);
         }
+        * { box-smoothing: antialiased; box-sizing:border-box; margin:0; padding:0; }
+        body,html { width:100%; height:100%;
+            font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;
+            background:#0a0a0a; color:var(--accent); overflow:hidden;
+            -webkit-font-smoothing:antialiased; }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body, html {
-            width: 100%; height: 100%;
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-            background-color: #0a0a0a;
-            color: var(--accent);
-            overflow: hidden;
-            -webkit-font-smoothing: antialiased;
-        }
+        #viewer-container { width:100%; height:100%; position:relative;
+            display:flex; justify-content:center; align-items:center; }
 
-        #viewer-container {
-            width: 100%; height: 100%;
-            position: relative;
-            display: flex; justify-content: center; align-items: center;
-        }
+        model-viewer { width:100%; height:100%; opacity:0; transition:opacity 0.6s ease; }
 
-        model-viewer {
-            width: 100%; height: 100%;
-            opacity: 0;
-            transition: opacity 0.5s ease;
-        }
+        /* Top Bar */
+        .top-nav { position:absolute; top:20px; left:20px; right:20px;
+            display:flex; justify-content:space-between; align-items:center;
+            z-index:10; pointer-events:none; }
+        .nav-pill { background:var(--glass-bg);
+            backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+            border:1px solid var(--glass-border);
+            padding:8px 16px; border-radius:20px;
+            pointer-events:auto; display:flex; gap:12px; align-items:center;
+            font-size:12px; letter-spacing:-0.2px; }
+        .status-dot { width:6px; height:6px; background:#ff9500; border-radius:50%; transition:background 0.3s; }
+        .status-dot.ready { background:#30d158; }
+        .status-dot.error { background:#ff3b30; }
 
-        /* Top Bar - Status Tracking */
-        .top-nav {
-            position: absolute; top: 20px; left: 20px; right: 20px;
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 10; pointer-events: none;
-        }
-        .nav-pill {
-            background: var(--glass-bg);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            border: 1px solid var(--glass-border);
-            padding: 8px 16px; border-radius: 20px;
-            pointer-events: auto; display: flex; gap: 12px; align-items: center;
-            font-size: 12px; letter-spacing: -0.2px;
-        }
-        .status-dot {
-            width: 6px; height: 6px; background: #ff9500; border-radius: 50%;
-            transition: background 0.3s;
-        }
-        .status-dot.ready { background: #30d158; }
+        /* Bottom Toolbar */
+        .bottom-toolbar { position:absolute; bottom:24px;
+            left:50%; transform:translateX(-50%);
+            background:var(--glass-bg);
+            backdrop-filter:blur(25px); -webkit-backdrop-filter:blur(25px);
+            border:1px solid var(--glass-border);
+            padding:6px; border-radius:30px;
+            display:flex; gap:4px; align-items:center;
+            z-index:10; max-width:95%; box-shadow:0 10px 30px rgba(0,0,0,0.5); }
+        .control-tab { display:flex; align-items:center;
+            padding:8px 14px; border-radius:20px;
+            font-size:12px; font-weight:500; color:var(--accent-dim);
+            cursor:pointer; user-select:none; transition:all 0.2s ease;
+            gap:6px; white-space:nowrap; }
+        .control-tab:hover { color:var(--accent); }
+        .control-tab.active { background:rgba(255,255,255,0.1); color:var(--accent); }
+        select.control-select { background:transparent; border:none; color:var(--accent);
+            font-size:12px; font-weight:500; outline:none; cursor:pointer; }
+        select.control-select option { background:#1a1a1a; color:#fff; }
+        .divider { width:1px; height:16px; background:rgba(255,255,255,0.15); margin:0 4px; }
 
-        /* Bottom Toolbar - Main Controls */
-        .bottom-toolbar {
-            position: absolute; bottom: 24px;
-            left: 50%; transform: translateX(-50%);
-            background: var(--glass-bg);
-            backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
-            border: 1px solid var(--glass-border);
-            padding: 6px; border-radius: 30px;
-            display: flex; gap: 4px; align-items: center;
-            z-index: 10; max-width: 95%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
+        /* AR Button */
+        #ar-trigger { background:var(--accent); color:#000;
+            font-weight:600; padding:10px 20px; border-radius:24px;
+            border:none; cursor:pointer; box-shadow:0 4px 15px rgba(0,0,0,0.3); }
+        #ar-trigger:hover { background:rgba(255,255,255,0.9); }
+        model-viewer > #ar-trigger { position:absolute; bottom:85px; left:50%;
+            transform:translateX(-50%); z-index:100; }
 
-        .control-tab {
-            display: flex; align-items: center;
-            padding: 8px 14px; border-radius: 20px;
-            font-size: 12px; font-weight: 500; color: var(--accent-dim);
-            cursor: pointer; user-select: none; transition: all 0.2s ease;
-            gap: 6px; white-space: nowrap;
-        }
-        .control-tab:hover { color: var(--accent); }
-        .control-tab.active {
-            background: rgba(255, 255, 255, 0.1);
-            color: var(--accent);
-        }
+        /* Loader Overlay */
+        #loader-overlay { position:absolute; inset:0;
+            display:flex; flex-direction:column;
+            justify-content:center; align-items:center; gap:16px;
+            z-index:20; pointer-events:none; transition:opacity 0.5s ease; background:#0a0a0a;}
+        #loading-text { font-size:13px; font-weight:400; color:var(--accent-dim); letter-spacing:0.2px; text-align:center; padding:0 20px;}
 
-        select.control-select {
-            background: transparent; border: none; color: var(--accent);
-            font-size: 12px; font-weight: 500; outline: none; cursor: pointer;
-        }
-        select.control-select option { background: #1a1a1a; color: #fff; }
+        /* Dual progress bars */
+        .bar-group { display:flex; flex-direction:column; gap:8px; width:220px; }
+        .bar-row { display:flex; flex-direction:column; gap:4px; }
+        .bar-label { font-size:10px; color:rgba(255,255,255,0.35); letter-spacing:0.4px; }
+        .bar-track { width:100%; height:2px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden; }
+        .bar-fill { height:100%; width:0%; background:var(--accent); border-radius:2px; transition:width 0.25s ease; }
+        #bar-fill-b { background: rgba(255,255,255,0.5); }
 
-        .divider {
-            width: 1px; height: 16px;
-            background: rgba(255, 255, 255, 0.15);
-            margin: 0 4px;
-        }
-
-        /* FIXED AR TRIGGER */
-        #ar-trigger {
-            background: var(--accent); color: #000;
-            font-weight: 600; padding: 10px 20px; border-radius: 24px;
-            border: none; cursor: pointer;
-            
-            position: absolute; 
-            bottom: 85px;
-            left: 50%;
-            transform: translateX(-50%);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            z-index: 100;
-        }
-        #ar-trigger:hover { background: rgba(255, 255, 255, 0.9); }
-        
-        #ar-trigger.show-ar-unsupported {
-            display: none !important;
-        }
-
-        /* Smooth Center Loader Text */
-        #loading-text {
-            position: absolute; font-size: 14px; font-weight: 400;
-            color: var(--accent-dim); transition: opacity 0.3s;
-            pointer-events: none;
-        }
+        #speed-label { font-size:11px; color:rgba(255,255,255,0.3); letter-spacing:0.3px; }
     </style>
 </head>
 <body>
+<div id="viewer-container">
 
-    <div id="viewer-container">
-        
-        <div id="loading-text">Fetching Asset from Backend...</div>
-
-        <model-viewer 
-            id="viewer" 
-            camera-controls 
-            touch-action="pan-y" 
-            shadow-intensity="1" 
-            exposure="0.9" 
-            environment-image="neutral"
-            ar
-            ar-modes="webxr scene-viewer quick-look"
-            ar-scale="auto"
-            ar-placement="floor">
-            
-            <button slot="ar-button" id="ar-trigger">▲ View in Space</button>
-        </model-viewer>
-
-        <div class="top-nav">
-            <div class="nav-pill">
-                <div id="status-light" class="status-dot"></div>
-                <span id="status-label">Connecting Engine...</span>
+    <div id="loader-overlay">
+        <div id="loading-text">Connecting to Live Streams…</div>
+        <div class="bar-group">
+            <div class="bar-row">
+                <div class="bar-label" id="label-a">BF700.glb</div>
+                <div class="bar-track"><div class="bar-fill" id="bar-fill-a"></div></div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label" id="label-b">HopperSimulated.glb</div>
+                <div class="bar-track"><div class="bar-fill" id="bar-fill-b"></div></div>
             </div>
         </div>
+        <div id="speed-label"></div>
+    </div>
 
-        <div class="bottom-toolbar">
-            
-            <div id="tab-turntable" class="control-tab"><span>⟳</span> Turntable</div>
-            <div id="tab-shadow" class="control-tab active"><span>☖</span> Shadows</div>
+    <model-viewer id="viewer"
+        camera-controls touch-action="pan-y"
+        shadow-intensity="1" exposure="0.9" environment-image="neutral"
+        ar ar-modes="webxr scene-viewer quick-look"
+        ar-scale="auto" ar-placement="floor">
+        <button slot="ar-button" id="ar-trigger">▲ View in Space</button>
+    </model-viewer>
 
-            <div id="dock-animations" style="display: none; align-items: center;">
-                <div class="divider"></div>
-                <div id="tab-play" class="control-tab active"><span>▻</span> Play</div>
-                <div class="control-tab">
-                    <select id="clip-picker" class="control-select"></select>
-                </div>
-            </div>
-
-            <div class="divider"></div>
-            <div id="tab-ar-placement" class="control-tab"><span>⚲</span> Floor</div>
-            <div id="tab-ar-scale" class="control-tab"><span>⤢</span> Scalable</div>
+    <div class="top-nav">
+        <div class="nav-pill">
+            <div id="status-light" class="status-dot"></div>
+            <span id="status-label">Connecting…</span>
         </div>
     </div>
 
-    <script>
-        const BACKEND_GLB_URL = 'https://cdn.jsdelivr.net/gh/GokulakannanSeenivasan111/Web-URL-Native@main/BF700.glb'; 
+    <div class="bottom-toolbar">
+        <div id="tab-turntable" class="control-tab"><span>⟳</span> Turntable</div>
+        <div id="tab-shadow"    class="control-tab active"><span>☖</span> Shadows</div>
+        <div id="dock-animations" style="display:none; align-items:center; gap:4px;">
+            <div class="divider"></div>
+            <div id="tab-play" class="control-tab active"><span>▻</span> Play</div>
+            <div class="control-tab">
+                <select id="clip-picker" class="control-select"></select>
+            </div>
+        </div>
+        <div class="divider"></div>
+        <div id="tab-ar-placement" class="control-tab"><span>⚲</span> Floor</div>
+        <div id="tab-ar-scale"    class="control-tab"><span>⤢</span> Scalable</div>
+    </div>
+</div>
 
-        const viewer = document.getElementById('viewer');
-        const arTrigger = document.getElementById('ar-trigger');
-        const loadingText = document.getElementById('loading-text');
-        const statusLight = document.getElementById('status-light');
-        const statusLabel = document.getElementById('status-label');
-        
-        const tabTurntable = document.getElementById('tab-turntable');
-        const tabShadow = document.getElementById('tab-shadow');
-        const dockAnims = document.getElementById('dock-animations');
-        const tabPlay = document.getElementById('tab-play');
-        const clipPicker = document.getElementById('clip-picker');
-        const tabArPlacement = document.getElementById('tab-ar-placement');
-        const tabArScale = document.getElementById('tab-ar-scale');
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
-        // Store target scaling calculations globally
-        let targetScaleString = "1 1 1";
-        let requiresRescaling = false;
+// ── Configuration ────────────────────────────────────────────────────────────
+const GLB_URLS = [
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/BF700.glb',            name: 'BF700.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/HopperSimulated.glb', name: 'HopperSimulated.glb' }
+];
 
-        function initRemoteStream() {
-            if (!BACKEND_GLB_URL) {
-                statusLabel.textContent = "Error: No backend URL specified.";
-                loadingText.textContent = "Configuration Missing.";
-                return;
+// ── DOM Elements ─────────────────────────────────────────────────────────────
+const viewer         = document.getElementById('viewer');
+const arTrigger      = document.getElementById('ar-trigger');
+const loaderOverlay  = document.getElementById('loader-overlay');
+const loadingText    = document.getElementById('loading-text');
+const speedLabel     = document.getElementById('speed-label');
+const statusLight    = document.getElementById('status-light');
+const statusLabel    = document.getElementById('status-label');
+const tabTurntable   = document.getElementById('tab-turntable');
+const tabShadow      = document.getElementById('tab-shadow');
+const dockAnims      = document.getElementById('dock-animations');
+const tabPlay        = document.getElementById('tab-play');
+const clipPicker     = document.getElementById('clip-picker');
+const tabArPlacement = document.getElementById('tab-ar-placement');
+const tabArScale     = document.getElementById('tab-ar-scale');
+const barFills       = [document.getElementById('bar-fill-a'), document.getElementById('bar-fill-b')];
+const barLabels      = [document.getElementById('label-a'),    document.getElementById('label-b')];
+
+let targetScaleString = '1 1 1';
+let requiresRescaling = false;
+
+// ── Utilities ────────────────────────────────────────────────────────────────
+const fmtBytes = b => b < 1024 ? b+'B' : b < 1048576 ? (b/1024).toFixed(1)+'KB' : (b/1048576).toFixed(2)+'MB';
+const fmtSpeed = b => b < 1024 ? b.toFixed(0)+'B/s' : b < 1048576 ? (b/1024).toFixed(1)+'KB/s' : (b/1048576).toFixed(2)+'MB/s';
+
+function hideLoader() {
+    loaderOverlay.style.opacity = '0';
+    setTimeout(() => { loaderOverlay.style.display = 'none'; }, 500);
+}
+
+// ── Stream Binary File Downloads ──────────────────────────────────────────────
+async function fetchGLB(url, barIdx) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP Error ${res.status} targeting asset ${url}`);
+
+    const contentLength = parseInt(res.headers.get('content-length') || '0', 10);
+    const hasLen = contentLength > 0;
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0, lastTime = performance.now(), lastBytes = 0;
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.byteLength;
+
+        const now = performance.now();
+        const elapsed = (now - lastTime) / 1000;
+        if (elapsed >= 0.25) {
+            const bps = (received - lastBytes) / elapsed;
+            lastTime = now; lastBytes = received;
+            const pct = hasLen ? (received / contentLength * 100) : Math.min(95, received / 1048576 * 10);
+            barFills[barIdx].style.width = Math.min(100, pct) + '%';
+            barLabels[barIdx].textContent = GLB_URLS[barIdx].name + ' — ' + fmtBytes(received) + (hasLen ? ' / '+fmtBytes(contentLength) : '');
+            speedLabel.textContent = fmtSpeed(bps);
+        }
+    }
+
+    barFills[barIdx].style.width = '100%';
+    barLabels[barIdx].textContent = GLB_URLS[barIdx].name + ' ✓';
+
+    const total = new Uint8Array(received);
+    let offset = 0;
+    for (const c of chunks) { total.set(c, offset); offset += c.byteLength; }
+    return total.buffer;
+}
+
+// ── Model Viewer UI Lifecycle Handlers ────────────────────────────────────────
+viewer.addEventListener('load', () => {
+    const clips = viewer.availableAnimations || [];
+    clipPicker.innerHTML = "";
+    
+    if (clips.length > 0) {
+        clips.forEach(name => {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            clipPicker.appendChild(opt);
+        });
+        dockAnims.style.display = 'flex';
+        viewer.animationName = clips[0];
+        viewer.play();
+        tabPlay.classList.add('active');
+        tabPlay.innerHTML = '<span>▻</span> Play';
+    } else {
+        dockAnims.style.display = 'none';
+    }
+
+    hideLoader();
+    viewer.style.opacity = '1';
+    statusLight.className = 'status-dot ready';
+    statusLabel.textContent = 'Engine Online';
+
+    // Bounding Box framing adjusters
+    requestAnimationFrame(() => {
+        const dim = viewer.getDimensions();
+        const max = Math.max(dim.x, dim.y, dim.z);
+        const target = 0.75;
+        if (max > 0 && max > target) {
+            const s = target / max;
+            targetScaleString = `${s} ${s} ${s}`;
+            requiresRescaling = true;
+        }
+    });
+});
+
+viewer.addEventListener('error', err => {
+    statusLight.className = 'status-dot error';
+    statusLabel.textContent = 'Load Error';
+    loadingText.textContent = 'Failed to compile unified runtime model scene graph.';
+    speedLabel.textContent  = '';
+    console.error('Model viewer error context:', err);
+});
+
+// ── Draco-Ready Core Engine Loading & Merging Pipeline ────────────────────────
+async function initRemoteStream() {
+    try {
+        loadingText.textContent = 'Fetching assets concurrently…';
+        statusLabel.textContent = 'Downloading…';
+
+        // 1. Parallel fetch
+        const [bufA, bufB] = await Promise.all([
+            fetchGLB(GLB_URLS[0].url, 0),
+            fetchGLB(GLB_URLS[1].url, 1)
+        ]);
+
+        loadingText.textContent = 'Initializing Draco geometry decoders…';
+        statusLabel.textContent = 'Processing…';
+        speedLabel.textContent  = '';
+
+        // 2. Configure Draco decoder linking directly to standard WebAssembly CDN
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+
+        // 3. Mount onto primary GLTFLoader engine instance
+        const loader = new GLTFLoader();
+        loader.setDRACOLoader(dracoLoader);
+
+        const parseGLTF = (buffer) => {
+            return new Promise((resolve, reject) => {
+                loader.parse(buffer, '', resolve, reject);
+            });
+        };
+
+        loadingText.textContent = 'Decoding Draco compressed objects…';
+        const gltfA = await parseGLTF(bufA);
+        const gltfB = await parseGLTF(bufB);
+
+        loadingText.textContent = 'Unifying scene layers…';
+
+        // 4. Combine scene structural groups cleanly 
+        const mergedRoot = new THREE.Group();
+        mergedRoot.add(gltfA.scene);
+        mergedRoot.add(gltfB.scene);
+
+        // Normalize unified shadow configurations
+        mergedRoot.traverse(node => {
+            if (node.isMesh) {
+                node.castShadow = true;
+                node.receiveShadow = true;
             }
-            viewer.src = BACKEND_GLB_URL;
+        });
+
+        // 5. Gather and track cross-origin animation timelines
+        const allAnimations = [];
+        if (gltfA.animations) {
+            gltfA.animations.forEach(clip => {
+                clip.name = clip.name ? `${clip.name} (BF700)` : 'Animation (BF700)';
+                allAnimations.push(clip);
+            });
+        }
+        if (gltfB.animations) {
+            gltfB.animations.forEach(clip => {
+                clip.name = clip.name ? `${clip.name} (Hopper)` : 'Animation (Hopper)';
+                allAnimations.push(clip);
+            });
         }
 
-        viewer.addEventListener('progress', (e) => {
-            const percentage = Math.round(e.detail.totalProgress * 100);
-            statusLabel.textContent = `Streaming: ${percentage}%`;
-            loadingText.textContent = `Downloading Matrix... ${percentage}%`;
-        });
+        loadingText.textContent = 'Compiling unified binary schema…';
 
-        viewer.addEventListener('load', () => {
-            loadingText.style.opacity = '0';
-            viewer.style.opacity = '1';
-            statusLight.classList.add('ready');
-            statusLabel.textContent = "Engine Online";
-
-            // 1. Calculate dimensions without instantly applying them to the DOM
-            const dimensions = viewer.getDimensions();
-            const maxDimension = Math.max(dimensions.x, dimensions.y, dimensions.z);
-            const targetSizeMeters = 0.75; // Ideal size in AR environment
-
-            if (maxDimension > targetSizeMeters) {
-                const calculatedScale = targetSizeMeters / maxDimension;
-                targetScaleString = `${calculatedScale} ${calculatedScale} ${calculatedScale}`;
-                requiresRescaling = true;
-            } else {
-                targetScaleString = "1 1 1";
-                requiresRescaling = false;
-            }
-
-            const tracks = viewer.availableAnimations;
-            if (tracks && tracks.length > 0) {
-                tracks.forEach(trackName => {
-                    const el = document.createElement('option');
-                    el.value = trackName; el.textContent = trackName;
-                    clipPicker.appendChild(el);
-                });
-                viewer.animationName = tracks[0];
-                viewer.play();
-                dockAnims.style.display = 'flex';
-            }
-        });
-
-        // 2. DYNAMIC AR-ONLY SCALING SWAP LOGIC
-        // Inject scale immediately upon user tapping the AR activation button
-        arTrigger.addEventListener('click', () => {
-            if (requiresRescaling) {
-                viewer.setAttribute('scale', targetScaleString);
-            }
-        });
-
-        // Listen for AR state changes to clean up the browser workspace environment
-        viewer.addEventListener('ar-status', (event) => {
-            if (event.detail.status === 'not-presenting') {
-                // User exited AR or returned to screen: Wipe out custom scale attribute entirely
-                viewer.removeAttribute('scale');
+        // 6. Output fresh, standard uncompressed GLB file directly into browser memory
+        const exporter = new GLTFExporter();
+        exporter.parse(
+            mergedRoot,
+            (mergedBuffer) => {
+                loadingText.textContent = 'Finalizing presentation viewport…';
                 
-                // Keep the standard 3D viewport perfectly framed
-                if (typeof viewer.updateFraming === 'function') {
-                    viewer.updateFraming();
-                }
-            }
-        });
+                const blob = new Blob([mergedBuffer], { type: 'model/gltf-binary' });
+                const blobURL = URL.createObjectURL(blob);
+                
+                // Mount to visual element layer
+                viewer.src = blobURL;
+            },
+            (error) => {
+                console.error(error);
+                throw new Error('Unified pipeline export layout failed.');
+            },
+            { binary: true, animations: allAnimations }
+        );
 
-        viewer.addEventListener('error', (err) => {
-            statusLabel.textContent = "CORS / Network Error";
-            loadingText.textContent = "Failed to compile remote file matrix.";
-            console.error("3D Engine Connection Failure:", err);
-        });
+    } catch (err) {
+        statusLight.className = 'status-dot error';
+        statusLabel.textContent = 'Fault Logged';
+        loadingText.textContent = `Exception: ${err.message || 'Initialization routine halted.'}`;
+        speedLabel.textContent  = '';
+        console.error('Core streaming interface broke:', err);
+    }
+}
 
-        tabTurntable.addEventListener('click', () => {
-            if (tabTurntable.classList.toggle('active')) {
-                viewer.setAttribute('auto-rotate', '');
-                viewer.setAttribute('rotation-per-second', '24deg');
-            } else {
-                viewer.removeAttribute('auto-rotate');
-            }
-        });
+// ── Interactive Navigation UI Controls ───────────────────────────────────────
+arTrigger.addEventListener('click', () => {
+    if (requiresRescaling) viewer.setAttribute('scale', targetScaleString);
+});
+viewer.addEventListener('ar-status', e => {
+    if (e.detail.status === 'not-presenting') {
+        viewer.removeAttribute('scale');
+        if (typeof viewer.updateFraming === 'function') viewer.updateFraming();
+        else viewer.cameraOrbit = 'auto auto auto';
+    }
+});
 
-        tabShadow.addEventListener('click', () => {
-            viewer.setAttribute('shadow-intensity', tabShadow.classList.toggle('active') ? "1" : "0");
-        });
+tabTurntable.addEventListener('click', () => {
+    if (tabTurntable.classList.toggle('active')) {
+        viewer.setAttribute('auto-rotate', '');
+        viewer.setAttribute('rotation-per-second', '24deg');
+    } else { viewer.removeAttribute('auto-rotate'); }
+});
 
-        tabPlay.addEventListener('click', () => {
-            if (viewer.paused) {
-                viewer.play();
-                tabPlay.classList.add('active');
-                tabPlay.innerHTML = '<span>▻</span> Play';
-            } else {
-                viewer.pause();
-                tabPlay.classList.remove('active');
-                tabPlay.innerHTML = '<span>⏸</span> Paused';
-            }
-        });
+tabShadow.addEventListener('click', () => {
+    viewer.setAttribute('shadow-intensity', tabShadow.classList.toggle('active') ? '1' : '0');
+});
 
-        clipPicker.addEventListener('change', (e) => {
-            viewer.animationName = e.target.value;
-            if (!viewer.paused) viewer.play();
-        });
+tabPlay.addEventListener('click', () => {
+    if (viewer.paused) {
+        viewer.play();
+        tabPlay.classList.add('active');
+        tabPlay.innerHTML = '<span>▻</span> Play';
+    } else {
+        viewer.pause();
+        tabPlay.classList.remove('active');
+        tabPlay.innerHTML = '<span>⏸</span> Paused';
+    }
+});
 
-        tabArPlacement.addEventListener('click', () => {
-            if (viewer.getAttribute('ar-placement') === 'floor') {
-                viewer.setAttribute('ar-placement', 'wall');
-                tabArPlacement.innerHTML = '<span>↕</span> Wall Mount';
-                tabArPlacement.classList.add('active');
-            } else {
-                viewer.setAttribute('ar-placement', 'floor');
-                tabArPlacement.innerHTML = '<span>⚲</span> Floor';
-                tabArPlacement.classList.remove('active');
-            }
-        });
+clipPicker.addEventListener('change', e => {
+    viewer.animationName = e.target.value;
+    viewer.play();
+    tabPlay.classList.add('active');
+    tabPlay.innerHTML = '<span>▻</span> Play';
+});
 
-        tabArScale.addEventListener('click', () => {
-            if (viewer.getAttribute('ar-scale') === 'auto') {
-                viewer.setAttribute('ar-scale', 'fixed');
-                tabArScale.innerHTML = '<span>🔒</span> Fixed 1:1';
-                tabArScale.classList.add('active');
-            } else {
-                viewer.setAttribute('ar-scale', 'auto');
-                tabArScale.innerHTML = '<span>⤢</span> Scalable';
-                tabArScale.classList.remove('active');
-            }
-        });
+tabArPlacement.addEventListener('click', () => {
+    if (viewer.getAttribute('ar-placement') === 'floor') {
+        viewer.setAttribute('ar-placement', 'wall');
+        tabArPlacement.innerHTML = '<span>↕</span> Wall Mount';
+        tabArPlacement.classList.add('active');
+    } else {
+        viewer.setAttribute('ar-placement', 'floor');
+        tabArPlacement.innerHTML = '<span>⚲</span> Floor';
+        tabArPlacement.classList.remove('active');
+    }
+});
 
-        initRemoteStream();
-    </script>
+tabArScale.addEventListener('click', () => {
+    if (viewer.getAttribute('ar-scale') === 'auto') {
+        viewer.setAttribute('ar-scale', 'fixed');
+        tabArScale.innerHTML = '<span>🔒</span> Fixed 1:1';
+        tabArScale.classList.add('active');
+    } else {
+        viewer.setAttribute('ar-scale', 'auto');
+        tabArScale.innerHTML = '<span>⤢</span> Scalable';
+        tabArScale.classList.remove('active');
+    }
+});
+
+// Launch Stream Routine
+initRemoteStream();
+</script>
 </body>
 </html>
