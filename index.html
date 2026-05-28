@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Studio 3D - Multi Stream</title>
+    <title>Studio 3D - Multi Stream (Optimized)</title>
     
     <script type="importmap">
       {
@@ -86,6 +86,8 @@
 
         /* Scalable Multi-Track Progress Monitors */
         .bar-group { display:flex; flex-direction:column; gap:10px; width:260px; max-height: 50vh; overflow-y: auto; padding: 4px; }
+        .bar-group::-webkit-scrollbar { width: 4px; }
+        .bar-group::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
         .bar-row { display:flex; flex-direction:column; gap:4px; }
         .bar-label { font-size:10px; color:rgba(255,255,255,0.35); letter-spacing:0.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .bar-track { width:100%; height:2px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden; }
@@ -105,8 +107,9 @@
 
     <model-viewer id="viewer"
         camera-controls touch-action="pan-y"
-        shadow-intensity="1" exposure="0.9" environment-image="neutral"
-        ar ar-modes="webxr scene-viewer quick-look"
+        shadow-intensity="0.4" shadow-softness="0.8" exposure="0.9" environment-image="neutral"
+        interpolation-decay="200"
+        ar ar-modes="webxr"
         ar-scale="auto" ar-placement="floor">
         <button slot="ar-button" id="ar-trigger">▲ View in Space</button>
     </model-viewer>
@@ -137,18 +140,18 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
-// ── Configuration Array (Add/Remove items dynamically here) ──────────────────
+// ── Configuration Array ──────────────────────────────────────────────────────
 const GLB_URLS = [
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Screed.glb',           name: 'Screed.glb' },
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/ScreedRH.glb',         name: 'ScreedRH.glb' },
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/ScreedLH.glb',         name: 'ScreedLH.glb' },
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Auger.glb',            name: 'Auger.glb' },
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Seat&Cabin.glb',            name: 'Seat&Cabin.glb' },
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Tracktor C.glb',            name: 'Tracktor.glb' },
-    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/TowArm.glb',            name: 'TowArm.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Screed.glb',        name: 'Screed.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/ScreedRH.glb',       name: 'ScreedRH.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/ScreedLH.glb',       name: 'ScreedLH.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Auger.glb',          name: 'Auger.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Seat&Cabin.glb',     name: 'Seat&Cabin.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/Tracktor C.glb',     name: 'Tracktor.glb' },
+    { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/TowArm.glb',          name: 'TowArm.glb' },
     { url: 'https://raw.githubusercontent.com/GokulakannanSeenivasan111/Test-Web-AR-GLB-Viewer/main/HopperSimulated.glb', name: 'HopperSimulated.glb' }
 ];
 
@@ -169,10 +172,9 @@ const tabArPlacement = document.getElementById('tab-ar-placement');
 const tabArScale     = document.getElementById('tab-ar-scale');
 const barContainer   = document.getElementById('dynamic-bar-container');
 
-// Tracking arrays for dynamically generated UI elements
+// Tracking variables
 const barFills  = [];
 const barLabels = [];
-
 let targetScaleString = '1 1 1';
 let requiresRescaling = false;
 
@@ -185,40 +187,31 @@ function hideLoader() {
     setTimeout(() => { loaderOverlay.style.display = 'none'; }, 500);
 }
 
-// ── Dynamic UI Progress Generator Routine ────────────────────────────────────
 function compileDynamicProgressBarLayout() {
     barContainer.innerHTML = '';
     GLB_URLS.forEach((asset, idx) => {
         const row = document.createElement('div');
         row.className = 'bar-row';
-
         const label = document.createElement('div');
         label.className = 'bar-label';
         label.textContent = asset.name;
-
         const track = document.createElement('div');
         track.className = 'bar-track';
-
         const fill = document.createElement('div');
         fill.className = 'bar-fill';
-        // Alternating opacity look to match aesthetic cleanly across stacked tracks
         if (idx > 0) fill.style.background = 'rgba(255,255,255,0.6)';
-
         track.appendChild(fill);
         row.appendChild(label);
         row.appendChild(track);
         barContainer.appendChild(row);
-
         barFills.push(fill);
         barLabels.push(label);
     });
 }
 
-// ── Stream Binary File Downloads ──────────────────────────────────────────────
 async function fetchGLB(url, barIdx) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP Error ${res.status} targeting asset ${url}`);
-
     const contentLength = parseInt(res.headers.get('content-length') || '0', 10);
     const hasLen = contentLength > 0;
     const reader = res.body.getReader();
@@ -230,14 +223,12 @@ async function fetchGLB(url, barIdx) {
         if (done) break;
         chunks.push(value);
         received += value.byteLength;
-
         const now = performance.now();
         const elapsed = (now - lastTime) / 1000;
         if (elapsed >= 0.25) {
             const bps = (received - lastBytes) / elapsed;
             lastTime = now; lastBytes = received;
             const pct = hasLen ? (received / contentLength * 100) : Math.min(95, received / 1048576 * 10);
-            
             if (barFills[barIdx]) barFills[barIdx].style.width = Math.min(100, pct) + '%';
             if (barLabels[barIdx]) {
                 barLabels[barIdx].textContent = GLB_URLS[barIdx].name + ' — ' + fmtBytes(received) + (hasLen ? ' / '+fmtBytes(contentLength) : '');
@@ -245,7 +236,6 @@ async function fetchGLB(url, barIdx) {
             speedLabel.textContent = fmtSpeed(bps);
         }
     }
-
     if (barFills[barIdx]) barFills[barIdx].style.width = '100%';
     if (barLabels[barIdx]) barLabels[barIdx].textContent = GLB_URLS[barIdx].name + ' ✓';
 
@@ -255,33 +245,153 @@ async function fetchGLB(url, barIdx) {
     return total.buffer;
 }
 
-// ── Model Viewer UI Lifecycle Handlers ────────────────────────────────────────
-viewer.addEventListener('load', () => {
-    const clips = viewer.availableAnimations || [];
-    clipPicker.innerHTML = "";
+// MEMORY MANAGEMENT FIX: Deep purge capability that forces immediate VRAM evacuation
+function purgeThreeGarbage(scene) {
+    scene.traverse(node => {
+        if (node.isMesh) {
+            if (node.geometry) node.geometry.dispose();
+            if (node.material) {
+                if (Array.isArray(node.material)) {
+                    node.material.forEach(mat => {
+                        if (mat.map) mat.map.dispose();
+                        mat.dispose();
+                    });
+                } else {
+                    if (node.material.map) node.material.map.dispose();
+                    node.material.dispose();
+                }
+            }
+        }
+    });
+    THREE.Cache.clear();
+}
+
+// ── Unified Processing Loop ──────────────────────────────────────────────────
+async function initRemoteStream() {
+    // Scaffold structural containers cleanly
+    const masterScene = new THREE.Scene();
+    const allAnimations = [];
+
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/');
     
-    if (clips.length > 0) {
-        clips.forEach(name => {
+    const loader = new GLTFLoader();
+    loader.setDRACOLoader(dracoLoader);
+
+    try {
+        compileDynamicProgressBarLayout();
+        statusLabel.textContent = 'Connecting…';
+
+        // Stream and parse layout sequentially to clear memory spikes immediately
+        for (let i = 0; i < GLB_URLS.length; i++) {
+            const asset = GLB_URLS[i];
+            loadingText.textContent = `Streaming asset ${i+1}/${GLB_URLS.length}: ${asset.name}…`;
+            statusLabel.textContent = `Streaming part ${i+1}…`;
+
+            // 1. Fetch binary block array
+            let buffer = await fetchGLB(asset.url, i);
+            speedLabel.textContent  = '';
+
+            // 2. Parse structural arrays safely
+            const gltf = await new Promise((resolve, reject) => {
+                loader.parse(buffer, '', resolve, reject);
+            });
+            
+            // 3. WIPE binary chunk reference instantly to prevent dual allocation RAM bottlenecks
+            buffer = null; 
+
+            if (gltf.scene) {
+                gltf.scene.traverse(node => {
+                    if (node.isMesh) {
+                        node.castShadow = true;
+                        node.receiveShadow = true;
+                        
+                        // PERFORMANCE FIX: Prevent CPU matrix thrashing on static parts
+                        node.matrixAutoUpdate = false;
+                        node.updateMatrix();
+                        
+                        // MOBILE PERFORMANCE FIX: Reduce floating-point precision footprints on the fly
+                        if (node.material) {
+                            node.material.precision = 'mediump';
+                            if (node.material.map) {
+                                node.material.map.minFilter = THREE.LinearFilter;
+                            }
+                        }
+                    }
+                });
+                masterScene.add(gltf.scene);
+            }
+
+            if (gltf.animations && gltf.animations.length > 0) {
+                const baseIdentity = asset.name.replace('.glb', '');
+                gltf.animations.forEach(clip => {
+                    clip.name = clip.name ? `${clip.name} (${baseIdentity})` : `Anim (${baseIdentity})`;
+                    allAnimations.push(clip);
+                });
+            }
+        }
+
+        loadingText.textContent = 'Compiling unified matrix asset layers…';
+        statusLabel.textContent = 'Assembling output…';
+
+        // Clear heavy Draco decompression buffers entirely before launching exporter
+        dracoLoader.dispose();
+        loader.setDRACOLoader(null);
+
+        const exporter = new GLTFExporter();
+        exporter.parse(
+            masterScene,
+            function (gltfBuffer) {
+                // MEMORY REVOLUTION FIX: Clean up and delete Three.js architecture objects 
+                // BEFORE letting model-viewer execute its internal engine parsing sequence.
+                purgeThreeGarbage(masterScene);
+
+                const blob = new Blob([gltfBuffer], { type: 'model/gltf-binary' });
+                
+                // Track and clean old system Blobs to prevent browser cache leaks on reload
+                if (viewer.src && viewer.src.startsWith('blob:')) {
+                    URL.revokeObjectURL(viewer.src);
+                }
+                
+                viewer.src = URL.createObjectURL(blob);
+                
+                hideLoader();
+                viewer.style.opacity = '1';
+                statusLight.className = 'status-dot ready';
+                statusLabel.textContent = 'Engine Online';
+            },
+            function (err) {
+                throw new Error("GLTF export compilation failed: " + err.message);
+            },
+            { binary: true, animations: allAnimations }
+        );
+
+    } catch (err) {
+        statusLight.className = 'status-dot error';
+        statusLabel.textContent = 'Sync Interrupted';
+        loadingText.textContent = `Exception context execution error: ${err.message}`;
+        console.error(err);
+    }
+}
+
+// ── Native Model Viewer Event Handling Lifecycle ─────────────────────────────
+viewer.addEventListener('load', () => {
+    const nativeClips = viewer.availableAnimations || [];
+    clipPicker.innerHTML = '';
+    
+    if (nativeClips.length > 0) {
+        nativeClips.forEach(name => {
             const opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
+            opt.value = name; opt.textContent = name;
             clipPicker.appendChild(opt);
         });
         dockAnims.style.display = 'flex';
-        viewer.animationName = clips[0];
+        viewer.animationName = nativeClips[0];
         viewer.play();
         tabPlay.classList.add('active');
         tabPlay.innerHTML = '<span>▻</span> Play';
-    } else {
-        dockAnims.style.display = 'none';
     }
 
-    hideLoader();
-    viewer.style.opacity = '1';
-    statusLight.className = 'status-dot ready';
-    statusLabel.textContent = 'Engine Online';
-
-    // Auto-framing scale calculations
     requestAnimationFrame(() => {
         const dim = viewer.getDimensions();
         const max = Math.max(dim.x, dim.y, dim.z);
@@ -297,110 +407,15 @@ viewer.addEventListener('load', () => {
 viewer.addEventListener('error', err => {
     statusLight.className = 'status-dot error';
     statusLabel.textContent = 'Load Error';
-    loadingText.textContent = 'Failed to compile unified multi-part pipeline data array.';
-    speedLabel.textContent  = '';
-    console.error('Model viewer layout exception context:', err);
+    loadingText.textContent = 'Graphics context hardware allocation failed.';
+    console.error(err);
 });
 
-// ── Fully Dynamic Asset Parallel Processing & Integration Loop ───────────────
-async function initRemoteStream() {
-    try {
-        // Compile UI bars to map perfectly with array configuration length
-        compileDynamicProgressBarLayout();
-
-        loadingText.textContent = 'Streaming segments concurrently…';
-        statusLabel.textContent = 'Downloading…';
-
-        // 1. Download ALL files concurrently using map patterns instead of hardcoded variables
-        const buffers = await Promise.all(
-            GLB_URLS.map((asset, idx) => fetchGLB(asset.url, idx))
-        );
-
-        loadingText.textContent = 'Initializing Draco hardware layers…';
-        statusLabel.textContent = 'Processing…';
-        speedLabel.textContent  = '';
-
-        // 2. Set up decoder pipeline
-        const dracoLoader = new DRACOLoader();
-        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
-
-        const loader = new GLTFLoader();
-        loader.setDRACOLoader(dracoLoader);
-
-        const parseGLTF = (buffer) => {
-            return new Promise((resolve, reject) => {
-                loader.parse(buffer, '', resolve, reject);
-            });
-        };
-
-        loadingText.textContent = 'Decompressing file assets…';
-        // 3. Process array buffers concurrently into active Three.js graphical layers
-        const gltfObjects = await Promise.all(buffers.map(buf => parseGLTF(buf)));
-
-        loadingText.textContent = 'Assembling scene nodes…';
-
-        const mergedRoot = new THREE.Group();
-        const allAnimations = [];
-
-        // 4. Iterate structurally through all converted layers to unify scenes and extract track animations
-        gltfObjects.forEach((gltf, idx) => {
-            if (gltf.scene) {
-                mergedRoot.add(gltf.scene);
-            }
-
-            // Isolate individual clip structures cleanly with clear string namespace suffixes
-            const baseIdentity = GLB_URLS[idx].name.replace('.glb', '');
-            if (gltf.animations && gltf.animations.length > 0) {
-                gltf.animations.forEach(clip => {
-                    clip.name = clip.name ? `${clip.name} (${baseIdentity})` : `Animation (${baseIdentity})`;
-                    allAnimations.push(clip);
-                });
-            }
-        });
-
-        // Universal shadow maps validation
-        mergedRoot.traverse(node => {
-            if (node.isMesh) {
-                node.castShadow = true;
-                node.receiveShadow = true;
-            }
-        });
-
-        loadingText.textContent = 'Compiling unified layout matrix…';
-
-        // 5. Build export binary schema directly into internal storage
-        const exporter = new GLTFExporter();
-        exporter.parse(
-            mergedRoot,
-            (mergedBuffer) => {
-                loadingText.textContent = 'Finalizing rendering context…';
-                
-                const blob = new Blob([mergedBuffer], { type: 'model/gltf-binary' });
-                const blobURL = URL.createObjectURL(blob);
-                
-                // Fire directly into model-viewer stream layer
-                viewer.src = blobURL;
-            },
-            (error) => {
-                console.error(error);
-                throw new Error('Unified matrix packaging runtime routine crashed.');
-            },
-            { binary: true, animations: allAnimations }
-        );
-
-    } catch (err) {
-        statusLight.className = 'status-dot error';
-        statusLabel.textContent = 'Fault Logged';
-        loadingText.textContent = `Exception: ${err.message || 'Initialization routine halted.'}`;
-        speedLabel.textContent  = '';
-        console.error('Initialization sequence broke:', err);
-    }
-}
-
-// ── Interactive Navigation UI Controls ───────────────────────────────────────
+// ── Interactive Layout UI Control Bindings ───────────────────────────────────
 arTrigger.addEventListener('click', () => {
     if (requiresRescaling) viewer.setAttribute('scale', targetScaleString);
 });
+
 viewer.addEventListener('ar-status', e => {
     if (e.detail.status === 'not-presenting') {
         viewer.removeAttribute('scale');
@@ -417,18 +432,18 @@ tabTurntable.addEventListener('click', () => {
 });
 
 tabShadow.addEventListener('click', () => {
-    viewer.setAttribute('shadow-intensity', tabShadow.classList.toggle('active') ? '1' : '0');
+    viewer.setAttribute('shadow-intensity', tabShadow.classList.toggle('active') ? '0.4' : '0');
 });
 
 tabPlay.addEventListener('click', () => {
-    if (viewer.paused) {
-        viewer.play();
-        tabPlay.classList.add('active');
-        tabPlay.innerHTML = '<span>▻</span> Play';
-    } else {
+    if (!viewer.paused) {
         viewer.pause();
         tabPlay.classList.remove('active');
         tabPlay.innerHTML = '<span>⏸</span> Paused';
+    } else {
+        viewer.play();
+        tabPlay.classList.add('active');
+        tabPlay.innerHTML = '<span>▻</span> Play';
     }
 });
 
@@ -463,7 +478,6 @@ tabArScale.addEventListener('click', () => {
     }
 });
 
-// Launch Pipeline Sequence
 initRemoteStream();
 </script>
 </body>
